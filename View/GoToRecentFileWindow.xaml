@@ -76,7 +76,7 @@
                                     Margin="0,0,4,0"
                                     Cursor="Hand"
                                     Click="CloseFileButton_Click"
-                                    ToolTip="Remove from list"
+                                    ToolTip="Remove from Recent Files List"
                                     Tag="{Binding}">
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
@@ -210,7 +210,7 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn Header="Modified" Width="140">
+                    <GridViewColumn Header="Modified" Width="120">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding Modified, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" Margin="0,1"/>
@@ -231,7 +231,7 @@
             <Button Content="Open"
                     Grid.Column="1"
                     Width="90"
-                    Height="30"
+                    Height="24"
                     Margin="0,0,8,0"
                     IsDefault="True"
                     Click="OpenButton_Click"/>
@@ -239,7 +239,7 @@
             <Button Content="Cancel"
                     Grid.Column="2"
                     Width="90"
-                    Height="30"
+                    Height="24"
                     IsCancel="True"/>
         </Grid>
     </Grid>

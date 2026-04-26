@@ -222,7 +222,9 @@ namespace GoToRecentFile.View
             // Re-raise the event so the caller can close the document in VS
             FileRemoved?.Invoke(entry.FullPath);
 
-            // Re-apply the current filter
+            // Re-apply the current filter – reset ItemsSource so WPF detects the change
+            // even when the search box is empty and the same list reference is reused.
+            FileListView.ItemsSource = null;
             SearchBox_TextChanged(SearchBox, null);
 
             // Restore selection near the same position
