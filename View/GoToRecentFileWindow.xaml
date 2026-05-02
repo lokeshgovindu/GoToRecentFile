@@ -22,28 +22,71 @@
 
         <!-- Sort arrow header templates -->
         <DataTemplate x:Key="HeaderTemplateArrowUp">
-            <DockPanel>
-                <TextBlock Text="{Binding}" DockPanel.Dock="Left"/>
+            <DockPanel HorizontalAlignment="Stretch" LastChildFill="True">
                 <Path DockPanel.Dock="Right" Margin="4,0,0,0"
-                      StrokeThickness="1" Fill="Gray"
+                      StrokeThickness="1" Fill="#FF606060"
                       Data="M 0,6 L 4,0 L 8,6 Z"
                       VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
             </DockPanel>
         </DataTemplate>
         <DataTemplate x:Key="HeaderTemplateArrowDown">
-            <DockPanel>
-                <TextBlock Text="{Binding}" DockPanel.Dock="Left"/>
+            <DockPanel HorizontalAlignment="Stretch" LastChildFill="True">
                 <Path DockPanel.Dock="Right" Margin="4,0,0,0"
-                      StrokeThickness="1" Fill="Gray"
+                      StrokeThickness="1" Fill="#FF606060"
                       Data="M 0,0 L 4,6 L 8,0 Z"
                       VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
             </DockPanel>
         </DataTemplate>
 
-        <!-- Left-align column headers -->
+        <!-- Left-align column headers with subtle gray hover -->
         <Style TargetType="GridViewColumnHeader">
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="Padding" Value="6,3,6,3"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridViewColumnHeader">
+                        <Grid>
+                            <Border x:Name="HeaderBorder"
+                                    BorderThickness="0,0,1,1"
+                                    BorderBrush="#FFD0D0D0"
+                                    Background="{TemplateBinding Background}">
+                                <ContentPresenter x:Name="HeaderContent"
+                                                  Margin="{TemplateBinding Padding}"
+                                                  HorizontalAlignment="Stretch"
+                                                  VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True"/>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="HeaderBorder" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#FFF0F0F0" Offset="0"/>
+                                            <GradientStop Color="#FFD8D8D8" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter TargetName="HeaderBorder" Property="BorderBrush" Value="#FFB0B0B0"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="HeaderBorder" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#FFD0D0D0" Offset="0"/>
+                                            <GradientStop Color="#FFB8B8B8" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter TargetName="HeaderBorder" Property="BorderBrush" Value="#FF909090"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- ListView item style: light blue selection, outline on hover, close button with icon states -->
