@@ -16,24 +16,24 @@
     <!--This section defines the elements the user can interact with, like a menu command or a button
         or combo box in a toolbar. -->
     <Buttons>
-      <Button guid="GoToRecentFile" id="MyCommand" priority="0x0100" type="Button">
+      <Button guid="GoToRecentFile" id="GoToRecentFile" priority="0x0100" type="Button">
         <Parent guid="GoToRecentFile" id="MyMenuGroup" />
         <Icon guid="ImageCatalogGuid" id="Time" />
         <CommandFlag>IconIsMoniker</CommandFlag>
         <Strings>
           <ButtonText>Go To Recent File</ButtonText>
-          <LocCanonicalName>.GoToRecentFile.MyCommand</LocCanonicalName>
+          <LocCanonicalName>.GoToRecentFile.GoToRecentFile</LocCanonicalName>
         </Strings>
       </Button>
     </Buttons>
   </Commands>
 
   <KeyBindings>
-    <KeyBinding guid="GoToRecentFile" id="MyCommand"
+    <KeyBinding guid="GoToRecentFile" id="GoToRecentFile"
                 editor="guidVSStd97"
                 key1="1" mod1="Control"
                 key2="R" mod2="Control"/>
-    <KeyBinding guid="GoToRecentFile" id="MyCommand"
+    <KeyBinding guid="GoToRecentFile" id="GoToRecentFile"
                 editor="guidVSStd97"
                 key1="1" mod1="Alt"/>
   </KeyBindings>
@@ -41,7 +41,7 @@
   <Symbols>
     <GuidSymbol name="GoToRecentFile" value="{25bb351f-b9b6-4f3b-af2f-6359defa618a}">
       <IDSymbol name="MyMenuGroup" value="0x0001" />
-      <IDSymbol name="MyCommand" value="0x0100" />
+      <IDSymbol name="GoToRecentFile" value="0x0100" />
     </GuidSymbol>
   </Symbols>
 </CommandTable>

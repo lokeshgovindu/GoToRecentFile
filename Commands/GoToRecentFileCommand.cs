@@ -6,8 +6,8 @@ using GoToRecentFile.View;
 
 namespace GoToRecentFile
 {
-    [Command(PackageIds.MyCommand)]
-    internal sealed class MyCommand : BaseCommand<MyCommand>
+    [Command(PackageIds.GoToRecentFile)]
+    internal sealed class GoToRecentFileCommand : BaseCommand<GoToRecentFileCommand>
     {
         protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
         {

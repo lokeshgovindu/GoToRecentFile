@@ -2,11 +2,13 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Interop;
 using GoToRecentFile.Models;
 
 namespace GoToRecentFile.View
@@ -53,11 +55,45 @@ namespace GoToRecentFile.View
 
         private GridLineAdorner _gridLineAdorner;
 
+        #region Win32 – title-bar button customisation
+
+        private const int GWL_STYLE   = -16;
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_MINIMIZEBOX  = 0x00020000;
+        private const int WS_MAXIMIZEBOX  = 0x00010000;
+        private const int WS_EX_CONTEXTHELP = 0x00000400;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        private void OnSourceInitialized(object sender, EventArgs e)
+        {
+            IntPtr hwnd = new WindowInteropHelper(this).Handle;
+
+            // Remove minimize and maximize buttons
+            int style = GetWindowLong(hwnd, GWL_STYLE);
+            style &= ~WS_MINIMIZEBOX;
+            style &= ~WS_MAXIMIZEBOX;
+            SetWindowLong(hwnd, GWL_STYLE, style);
+
+            // Add the Help (?) button
+            int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            exStyle |= WS_EX_CONTEXTHELP;
+            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle);
+        }
+
+        #endregion
+
         internal GoToRecentFileWindow(IReadOnlyList<RecentFileEntry> files)
         {
             _allFiles = files?.ToList() ?? new List<RecentFileEntry>();
 
             InitializeComponent();
+
+            SourceInitialized += OnSourceInitialized;
 
             FileListView.ItemsSource = _allFiles;
             UpdateStatus(_allFiles.Count, _allFiles.Count);
