@@ -62,6 +62,7 @@
     </Compile>
     <Compile Include="View\GridLineAdorner.cs" />
     <Compile Include="View\HighlightConverter.cs" />
+    <Compile Include="View\MarqueeAdorner.cs" />
     <Compile Include="View\PlaceholderVisibilityConverter.cs" />
     <Compile Include="VSCommandTable.cs">
       <AutoGen>True</AutoGen>
@@ -114,4 +115,3 @@
   </Target>
   -->
 </Project>
-

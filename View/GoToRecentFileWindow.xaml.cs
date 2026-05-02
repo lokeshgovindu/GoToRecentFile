@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -8,6 +10,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Interop;
 using GoToRecentFile.Models;
 
@@ -54,6 +57,13 @@ namespace GoToRecentFile.View
         internal event Action<string> FileRemoved;
 
         private GridLineAdorner _gridLineAdorner;
+        // Prevents SearchBox_TextChanged from auto-selecting item 0 while RemoveFiles restores selection.
+        private bool _restoringSelection;
+
+        // Marquee (rubber-band) selection
+        private MarqueeAdorner _marqueeAdorner;
+        private Point _marqueeDragStart;
+        private bool _marqueeActive;
 
         #region Win32 – title-bar button customisation
 
@@ -115,6 +125,7 @@ namespace GoToRecentFile.View
 
                 SearchBox.Focus();
                 AttachGridLineAdorner();
+                AttachMarqueeAdorner();
             };
 
             FileListView.SizeChanged += (s, e) => InvalidateGridLines();
@@ -124,6 +135,11 @@ namespace GoToRecentFile.View
                 _lastLeft = Left;
                 _lastTop = Top;
             };
+        }
+
+        private void FileListView_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            OpenButton.IsEnabled = FileListView.SelectedItems.Count == 1;
         }
 
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -149,7 +165,7 @@ namespace GoToRecentFile.View
                 UpdateStatus(filtered.Count, _allFiles.Count);
             }
 
-            if (FileListView.Items.Count > 0)
+            if (!_restoringSelection && FileListView.Items.Count > 0)
             {
                 FileListView.SelectedIndex = 0;
             }
@@ -252,21 +268,193 @@ namespace GoToRecentFile.View
             if (!((sender as System.Windows.Controls.Button)?.Tag is RecentFileEntry entry))
                 return;
 
+            RemoveFiles(new List<RecentFileEntry> { entry });
+        }
+
+        /// <summary>
+        /// Removes the given entries from the list, fires <see cref="FileRemoved"/> for each,
+        /// and refreshes the view while preserving the remaining selection.
+        /// </summary>
+        private void RemoveFiles(IReadOnlyList<RecentFileEntry> entries)
+        {
+            if (entries.Count == 0)
+                return;
+
+            // Remember which items were selected but are NOT being removed.
+            var keepSelected = FileListView.SelectedItems
+                .Cast<RecentFileEntry>()
+                .Except(entries)
+                .ToList();
+
             int selectedIndex = FileListView.SelectedIndex;
-            _allFiles.Remove(entry);
 
-            // Re-raise the event so the caller can close the document in VS
-            FileRemoved?.Invoke(entry.FullPath);
-
-            // Re-apply the current filter – reset ItemsSource so WPF detects the change
-            // even when the search box is empty and the same list reference is reused.
-            FileListView.ItemsSource = null;
-            SearchBox_TextChanged(SearchBox, null);
-
-            // Restore selection near the same position
-            if (FileListView.Items.Count > 0)
+            foreach (RecentFileEntry entry in entries)
             {
-                FileListView.SelectedIndex = Math.Min(selectedIndex, FileListView.Items.Count - 1);
+                _allFiles.Remove(entry);
+                FileRemoved?.Invoke(entry.FullPath);
+            }
+
+            if (keepSelected.Count > 0)
+            {
+                _restoringSelection = true;
+                FileListView.ItemsSource = null;
+                SearchBox_TextChanged(SearchBox, null);
+                _restoringSelection = false;
+
+                // Containers are generated after ItemsSource is set; defer until layout is done.
+#pragma warning disable VSSDK007
+                ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+                {
+                    await System.Threading.Tasks.Task.Delay(0); // yield to allow layout pass
+                    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                    FileListView.SelectedItems.Clear();
+                    foreach (RecentFileEntry item in keepSelected)
+                    {
+                        if (FileListView.ItemContainerGenerator.ContainerFromItem(item) is ListViewItem container)
+                            container.IsSelected = true;
+                    }
+                }).FileAndForget(nameof(RemoveFiles));
+#pragma warning restore VSSDK007
+            }
+            else
+            {
+                FileListView.ItemsSource = null;
+                SearchBox_TextChanged(SearchBox, null);
+
+                if (FileListView.Items.Count > 0)
+                    FileListView.SelectedIndex = Math.Min(selectedIndex, FileListView.Items.Count - 1);
+            }
+        }
+
+        #region Context menu
+
+        private void FileListView_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            bool hasSelection = FileListView.SelectedItems.Count > 0;
+            bool single = FileListView.SelectedItems.Count == 1;
+
+            CtxCloseFiles.Header = FileListView.SelectedItems.Count > 1 ? "Close Files" : "Close File";
+            CtxCloseFiles.IsEnabled = hasSelection;
+            CtxCopyFilename.IsEnabled = single;
+            CtxOpenContainingFolder.IsEnabled = single;
+            CtxCopyFilePath.IsEnabled = single;
+
+            string project = single
+                ? (FileListView.SelectedItem as RecentFileEntry)?.Project
+                : null;
+            bool hasProject = !string.IsNullOrEmpty(project);
+            CtxSelectProjectFiles.Header = hasProject ? $"Select Files in '{project}'" : "Select Files in Project";
+            CtxSelectProjectFiles.IsEnabled = hasProject;
+
+            CtxSelectMiscFiles.IsEnabled = FileListView.Items
+                .OfType<RecentFileEntry>()
+                .Any(f => string.Equals(f.Project, "Miscellaneous Files", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void CtxCloseFiles_Click(object sender, RoutedEventArgs e)
+        {
+            var toRemove = FileListView.SelectedItems.Cast<RecentFileEntry>().ToList();
+            RemoveFiles(toRemove);
+        }
+
+        private void CtxCopyFilename_Click(object sender, RoutedEventArgs e)
+        {
+            if (FileListView.SelectedItem is RecentFileEntry entry)
+            {
+#pragma warning disable VSSDK007
+                ThreadHelper.JoinableTaskFactory.RunAsync(() => TrySetClipboardAsync(entry.FileName)).FileAndForget(nameof(CtxCopyFilename_Click));
+#pragma warning restore VSSDK007
+            }
+        }
+
+        private void CtxOpenContainingFolder_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(FileListView.SelectedItem is RecentFileEntry entry))
+                return;
+
+            string folder = Path.GetDirectoryName(entry.FullPath);
+            if (Directory.Exists(folder))
+                Process.Start("explorer.exe", $"/select,\"{entry.FullPath}\"");
+        }
+
+        private void CtxCopyFilePath_Click(object sender, RoutedEventArgs e)
+        {
+            if (FileListView.SelectedItem is RecentFileEntry entry)
+            {
+#pragma warning disable VSSDK007
+                ThreadHelper.JoinableTaskFactory.RunAsync(() => TrySetClipboardAsync(entry.FullPath)).FileAndForget(nameof(CtxCopyFilePath_Click));
+#pragma warning restore VSSDK007
+            }
+        }
+
+        private static async System.Threading.Tasks.Task TrySetClipboardAsync(string text, int retries = 5)
+        {
+            for (int i = 0; i < retries; i++)
+            {
+                try
+                {
+                    Clipboard.SetDataObject(text, true);
+                    return;
+                }
+                catch (System.Runtime.InteropServices.COMException ex)
+                    when (ex.HResult == unchecked((int)0x800401D0)) // CLIPBRD_E_CANT_OPEN
+                {
+                    await System.Threading.Tasks.Task.Delay(10);
+                }
+            }
+        }
+
+        private void CtxSelectProjectFiles_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(FileListView.SelectedItem is RecentFileEntry selected) ||
+                string.IsNullOrEmpty(selected.Project))
+                return;
+
+            FileListView.SelectedItems.Clear();
+            foreach (object item in FileListView.Items)
+            {
+                if (item is RecentFileEntry entry &&
+                    string.Equals(entry.Project, selected.Project, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (FileListView.ItemContainerGenerator.ContainerFromItem(entry) is ListViewItem container)
+                        container.IsSelected = true;
+                }
+            }
+        }
+
+        private void CtxSelectMiscFiles_Click(object sender, RoutedEventArgs e)
+        {
+            FileListView.SelectedItems.Clear();
+            foreach (object item in FileListView.Items)
+            {
+                if (item is RecentFileEntry entry &&
+                    string.Equals(entry.Project, "Miscellaneous Files", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (FileListView.ItemContainerGenerator.ContainerFromItem(entry) is ListViewItem container)
+                        container.IsSelected = true;
+                }
+            }
+        }
+
+        private void CtxSelectAll_Click(object sender, RoutedEventArgs e)
+        {
+            FileListView.SelectAll();
+        }
+
+        #endregion
+
+        private void FileListView_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.A && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                FileListView.SelectAll();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Delete)
+            {
+                var toRemove = FileListView.SelectedItems.Cast<RecentFileEntry>().ToList();
+                RemoveFiles(toRemove);
+                e.Handled = true;
             }
         }
 
@@ -285,9 +473,6 @@ namespace GoToRecentFile.View
             Title = $"Go To Recent File [{shown} of {total}]";
         }
 
-        /// <summary>
-        /// Attaches the grid line adorner to the ListView and listens for column width changes.
-        /// </summary>
         private void AttachGridLineAdorner()
         {
             var adornerLayer = AdornerLayer.GetAdornerLayer(FileListView);
@@ -316,6 +501,85 @@ namespace GoToRecentFile.View
         private void InvalidateGridLines()
         {
             _gridLineAdorner?.InvalidateVisual();
+        }
+
+        private void AttachMarqueeAdorner()
+        {
+            var adornerLayer = AdornerLayer.GetAdornerLayer(FileListView);
+            if (adornerLayer == null)
+                return;
+
+            _marqueeAdorner = new MarqueeAdorner(FileListView);
+            adornerLayer.Add(_marqueeAdorner);
+
+            FileListView.PreviewMouseLeftButtonDown += FileListView_MarqueeMouseDown;
+            FileListView.PreviewMouseMove           += FileListView_MarqueeMouseMove;
+            FileListView.PreviewMouseLeftButtonUp   += FileListView_MarqueeMouseUp;
+        }
+
+        private void FileListView_MarqueeMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            // Only start marquee when clicking on the empty area (not on an item).
+            if (e.OriginalSource is DependencyObject source &&
+                GetVisualAncestor<ListViewItem>(source) != null)
+                return;
+
+            _marqueeDragStart = e.GetPosition(FileListView);
+            _marqueeActive = true;
+            FileListView.CaptureMouse();
+
+            FileListView.SelectedItems.Clear();
+            e.Handled = false;
+        }
+
+        private void FileListView_MarqueeMouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_marqueeActive || e.LeftButton != MouseButtonState.Pressed)
+                return;
+
+            Point current = e.GetPosition(FileListView);
+            _marqueeAdorner.Update(_marqueeDragStart, current);
+
+            UpdateMarqueeSelection(current);
+        }
+
+        private void FileListView_MarqueeMouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!_marqueeActive)
+                return;
+
+            _marqueeActive = false;
+            _marqueeAdorner.Clear();
+            FileListView.ReleaseMouseCapture();
+        }
+
+        private void UpdateMarqueeSelection(Point current)
+        {
+            Rect dragRect = new Rect(_marqueeDragStart, current);
+
+            foreach (object item in FileListView.Items)
+            {
+                if (!(FileListView.ItemContainerGenerator.ContainerFromItem(item) is ListViewItem container))
+                    continue;
+
+                // Get bounding rect of the item relative to the ListView.
+                Point topLeft = container.TranslatePoint(new Point(0, 0), FileListView);
+                Rect itemRect = new Rect(topLeft, new Size(container.ActualWidth, container.ActualHeight));
+
+                container.IsSelected = dragRect.IntersectsWith(itemRect);
+            }
+        }
+
+        private static T GetVisualAncestor<T>(DependencyObject element) where T : DependencyObject
+        {
+            DependencyObject current = VisualTreeHelper.GetParent(element);
+            while (current != null)
+            {
+                if (current is T match)
+                    return match;
+                current = VisualTreeHelper.GetParent(current);
+            }
+            return null;
         }
 
 
