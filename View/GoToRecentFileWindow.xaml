@@ -6,6 +6,7 @@
         xmlns:local="clr-namespace:GoToRecentFile.View"
         mc:Ignorable="d"
         Title="Go To Recent File"
+        Icon="/GoToRecentFile;component/Resources/Icon.png"
         MinWidth="760"
         MinHeight="420"
         Width="980"
@@ -274,7 +275,7 @@
             <Button Content="Open"
                     Grid.Column="1"
                     Width="90"
-                    Height="30"
+                    Height="24"
                     Margin="0,0,8,0"
                     IsDefault="True"
                     Click="OpenButton_Click"/>
@@ -282,7 +283,7 @@
             <Button Content="Cancel"
                     Grid.Column="2"
                     Width="90"
-                    Height="30"
+                    Height="24"
                     IsCancel="True"/>
         </Grid>
     </Grid>
