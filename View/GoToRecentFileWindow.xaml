@@ -254,7 +254,7 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn Header="Modified" Width="140">
+                    <GridViewColumn Header="Modified" Width="120">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding Modified, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" Margin="0,1"/>
