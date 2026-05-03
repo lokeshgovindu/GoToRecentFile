@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
     <Metadata>
-        <Identity Id="GoToRecentFile.dc380116-29c9-4190-bd19-434954fded50" Version="2026.1.0.1" Language="en-US" Publisher="Lokesh Govindu" />
+        <Identity Id="GoToRecentFile.dc380116-29c9-4190-bd19-434954fded50" Version="2026.1.0.2" Language="en-US" Publisher="Lokesh Govindu" />
         <DisplayName>GoToRecentFile</DisplayName>
         <Description xml:space="preserve">Alternative for GoToRecentFile in Visual Studio IDE.</Description>
         <MoreInfo>https://marketplace.visualstudio.com/items?itemName=LokeshGovindu.GoToRecentFile</MoreInfo>

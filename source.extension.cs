@@ -12,7 +12,7 @@ namespace GoToRecentFile
         public const string Name = "GoToRecentFile";
         public const string Description = @"Alternative for GoToRecentFile in Visual Studio IDE.";
         public const string Language = "en-US";
-        public const string Version = "2026.1.0.1";
+        public const string Version = "2026.1.0.2";
         public const string Author = "Lokesh Govindu";
         public const string Tags = "";
         public const bool IsPreview = false;
