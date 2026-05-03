@@ -101,7 +101,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListViewItem">
-                        <Grid SnapsToDevicePixels="True" UseLayoutRounding="True">
+                        <Grid SnapsToDevicePixels="True" UseLayoutRounding="True" Background="Transparent">
                             <!-- Background layer for selection/hover fill -->
                             <Border x:Name="BgBd" Background="Transparent"/>
                             <!-- Content layer with cell borders for vertical lines -->
@@ -209,14 +209,31 @@
         <ListView x:Name="FileListView"
                   Grid.Row="1"
                   Margin="0,0,0,10"
-                  SelectionMode="Single"
+                  SelectionMode="Extended"
                   BorderBrush="Gray"
                   BorderThickness="1"
                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                  ScrollViewer.CanContentScroll="False"
                   HorizontalContentAlignment="Stretch"
                   UseLayoutRounding="True"
                   MouseDoubleClick="FileListView_MouseDoubleClick"
-                  GridViewColumnHeader.Click="GridViewColumnHeader_Click">
+                  GridViewColumnHeader.Click="GridViewColumnHeader_Click"
+                  SelectionChanged="FileListView_SelectionChanged"
+                  ContextMenuOpening="FileListView_ContextMenuOpening"
+                  KeyDown="FileListView_KeyDown">
+            <ListView.ContextMenu>
+                <ContextMenu>
+                    <MenuItem x:Name="CtxCloseFiles" Header="Close File(s)" Click="CtxCloseFiles_Click"/>
+                    <Separator/>
+                    <MenuItem x:Name="CtxCopyFilename" Header="Copy Filename" Click="CtxCopyFilename_Click"/>
+                    <MenuItem x:Name="CtxCopyFilePath" Header="Copy File Path" Click="CtxCopyFilePath_Click"/>
+                    <MenuItem x:Name="CtxOpenContainingFolder" Header="Open Containing Folder" Click="CtxOpenContainingFolder_Click"/>
+                    <Separator/>
+                    <MenuItem x:Name="CtxSelectProjectFiles" Header="Select Files in Project" Click="CtxSelectProjectFiles_Click"/>
+                    <MenuItem x:Name="CtxSelectMiscFiles" Header="Select Miscellaneous Files" Click="CtxSelectMiscFiles_Click"/>
+                    <MenuItem Header="Select All" InputGestureText="Ctrl+A" Click="CtxSelectAll_Click"/>
+                </ContextMenu>
+            </ListView.ContextMenu>
                 <ListView.View>
                     <GridView>
                     <GridViewColumn Header="File" Width="200">
@@ -272,7 +289,8 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <Button Content="Open"
+            <Button x:Name="OpenButton"
+                    Content="Open"
                     Grid.Column="1"
                     Width="90"
                     Height="24"
