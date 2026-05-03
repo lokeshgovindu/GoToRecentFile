@@ -4,6 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:local="clr-namespace:GoToRecentFile.View"
+        xmlns:vsshell="clr-namespace:Microsoft.VisualStudio.Shell;assembly=Microsoft.VisualStudio.Shell.15.0"
         mc:Ignorable="d"
         Title="Go To Recent File"
         Icon="/GoToRecentFile;component/Resources/Icon.png"
@@ -17,15 +18,42 @@
         TextOptions.TextFormattingMode="Display"
         TextOptions.TextRenderingMode="ClearType"
         FontSize="12"
-        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
+        Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
+        Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}">
     <Window.Resources>
         <local:HighlightConverter x:Key="HighlightConverter" HighlightBrush="Yellow"/>
+
+        <!-- Gradient blue for selected items in light theme -->
+        <LinearGradientBrush x:Key="SelectedItemGradientLight" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#FFECF4FF" Offset="0"/>
+            <GradientStop Color="#FFC4DDFC" Offset="0.5"/>
+            <GradientStop Color="#FFB0CFF7" Offset="1"/>
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="SelectedItemBorderLight" Color="#FF7DA2CE"/>
+
+        <!-- Gradient gray for selected items in dark theme -->
+        <LinearGradientBrush x:Key="SelectedItemGradientDark" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#FF505862" Offset="0"/>
+            <GradientStop Color="#FF3E4750" Offset="0.5"/>
+            <GradientStop Color="#FF333B44" Offset="1"/>
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="SelectedItemBorderDark" Color="#FF6A7A8A"/>
+
+        <!-- Active brushes (swapped at runtime based on theme) -->
+        <LinearGradientBrush x:Key="SelectedItemBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#FFECF4FF" Offset="0"/>
+            <GradientStop Color="#FFC4DDFC" Offset="0.5"/>
+            <GradientStop Color="#FFB0CFF7" Offset="1"/>
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="SelectedItemBorder" Color="#FF7DA2CE"/>
+        <SolidColorBrush x:Key="SelectedItemForeground" Color="#FF000000"/>
 
         <!-- Sort arrow header templates -->
         <DataTemplate x:Key="HeaderTemplateArrowUp">
             <DockPanel HorizontalAlignment="Stretch" LastChildFill="True">
                 <Path DockPanel.Dock="Right" Margin="4,0,0,0"
-                      StrokeThickness="1" Fill="#FF606060"
+                      StrokeThickness="1"
+                      Fill="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
                       Data="M 0,6 L 4,0 L 8,6 Z"
                       VerticalAlignment="Center"/>
                 <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
@@ -34,25 +62,27 @@
         <DataTemplate x:Key="HeaderTemplateArrowDown">
             <DockPanel HorizontalAlignment="Stretch" LastChildFill="True">
                 <Path DockPanel.Dock="Right" Margin="4,0,0,0"
-                      StrokeThickness="1" Fill="#FF606060"
+                      StrokeThickness="1"
+                      Fill="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
                       Data="M 0,0 L 4,6 L 8,0 Z"
                       VerticalAlignment="Center"/>
                 <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
             </DockPanel>
         </DataTemplate>
 
-        <!-- Left-align column headers with subtle gray hover -->
+        <!-- Left-align column headers with subtle VS-themed hover -->
         <Style TargetType="GridViewColumnHeader">
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="Padding" Value="6,3,6,3"/>
             <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="GridViewColumnHeader">
                         <Grid>
                             <Border x:Name="HeaderBorder"
                                     BorderThickness="0,0,1,1"
-                                    BorderBrush="#FFD0D0D0"
+                                    BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowBorderKey}}"
                                     Background="{TemplateBinding Background}">
                                 <ContentPresenter x:Name="HeaderContent"
                                                   Margin="{TemplateBinding Padding}"
@@ -60,29 +90,37 @@
                                                   VerticalAlignment="Center"
                                                   RecognizesAccessKey="True"/>
                             </Border>
+                            <!-- PART_HeaderGripper is required by GridViewColumnHeader for column resize -->
+                            <Thumb x:Name="PART_HeaderGripper"
+                                   HorizontalAlignment="Right"
+                                   Margin="0,0,-9,0"
+                                   Width="18"
+                                   Cursor="SizeWE">
+                                <Thumb.Style>
+                                    <Style TargetType="Thumb">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Thumb">
+                                                    <Border Background="Transparent"/>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Thumb.Style>
+                            </Thumb>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="HeaderBorder" Property="Background">
-                                    <Setter.Value>
-                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                            <GradientStop Color="#FFF0F0F0" Offset="0"/>
-                                            <GradientStop Color="#FFD8D8D8" Offset="1"/>
-                                        </LinearGradientBrush>
-                                    </Setter.Value>
-                                </Setter>
-                                <Setter TargetName="HeaderBorder" Property="BorderBrush" Value="#FFB0B0B0"/>
+                                <Setter TargetName="HeaderBorder" Property="Background"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarMouseOverBackgroundGradientKey}}"/>
+                                <Setter TargetName="HeaderBorder" Property="BorderBrush"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarSelectedBorderKey}}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="HeaderBorder" Property="Background">
-                                    <Setter.Value>
-                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                            <GradientStop Color="#FFD0D0D0" Offset="0"/>
-                                            <GradientStop Color="#FFB8B8B8" Offset="1"/>
-                                        </LinearGradientBrush>
-                                    </Setter.Value>
-                                </Setter>
-                                <Setter TargetName="HeaderBorder" Property="BorderBrush" Value="#FF909090"/>
+                                <Setter TargetName="HeaderBorder" Property="Background"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarMouseDownBackgroundGradientKey}}"/>
+                                <Setter TargetName="HeaderBorder" Property="BorderBrush"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarMouseDownBorderKey}}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -90,9 +128,9 @@
             </Setter>
         </Style>
 
-        <!-- ListView item style: light blue selection, outline on hover, close button with icon states -->
+        <!-- ListView item style: themed selection, outline on hover, close button -->
         <Style TargetType="ListViewItem">
-            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="Margin" Value="0"/>
             <Setter Property="Padding" Value="0"/>
@@ -101,16 +139,16 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListViewItem">
-                        <Grid SnapsToDevicePixels="True" UseLayoutRounding="True" Background="Transparent">
-                            <!-- Background layer for selection/hover fill -->
-                            <Border x:Name="BgBd" Background="Transparent"/>
-                            <!-- Content layer with cell borders for vertical lines -->
-                            <GridViewRowPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
-                            <!-- Overlay border for hover/selection outline (does not affect layout) -->
-                            <Border x:Name="OutlineBd"
-                                    BorderBrush="Transparent"
-                                    BorderThickness="1"
-                                    IsHitTestVisible="False"/>
+                    <Grid SnapsToDevicePixels="True" UseLayoutRounding="True" Background="Transparent">
+                        <!-- Background layer for selection fill -->
+                        <Border x:Name="BgBd" Background="Transparent"/>
+                        <!-- Content layer with cell borders for vertical lines -->
+                        <GridViewRowPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        <!-- Overlay border for hover/selection outline (does not affect layout) -->
+                        <Border x:Name="OutlineBd"
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
+                                IsHitTestVisible="False"/>
                             <!-- Close button -->
                             <Button x:Name="CloseBtn"
                                     Visibility="Hidden"
@@ -125,7 +163,8 @@
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
                                         <Grid Width="16" Height="16" SnapsToDevicePixels="True">
-                                            <Border x:Name="InactiveBd" Background="White"
+                                            <Border x:Name="InactiveBd"
+                                                    Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
                                                     BorderBrush="#FFE04040" BorderThickness="1"
                                                     CornerRadius="1">
                                                 <Canvas Width="10" Height="10"
@@ -162,22 +201,92 @@
                             </Button>
                         </Grid>
                         <ControlTemplate.Triggers>
+                            <!-- Hover: hollow outline only, no fill -->
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="OutlineBd" Property="BorderBrush" Value="#FFB0B0B0"/>
+                                <Setter TargetName="OutlineBd" Property="BorderBrush"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarSelectedBorderKey}}"/>
                                 <Setter TargetName="CloseBtn" Property="Visibility" Value="Visible"/>
                             </Trigger>
+                            <!-- Selected: themed gradient fill -->
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="BgBd" Property="Background" Value="#FFD8EAFA"/>
-                                <Setter TargetName="OutlineBd" Property="BorderBrush" Value="#FF7EB4EA"/>
+                                <Setter TargetName="BgBd" Property="Background"
+                                        Value="{DynamicResource SelectedItemBrush}"/>
+                                <Setter TargetName="OutlineBd" Property="BorderBrush"
+                                        Value="{DynamicResource SelectedItemBorder}"/>
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource SelectedItemForeground}"/>
                             </Trigger>
+                            <!-- Selected + Hover: keep gradient selection, show close button -->
                             <MultiTrigger>
                                 <MultiTrigger.Conditions>
                                     <Condition Property="IsSelected" Value="True"/>
                                     <Condition Property="IsMouseOver" Value="True"/>
                                 </MultiTrigger.Conditions>
-                                <Setter TargetName="OutlineBd" Property="BorderBrush" Value="#FF7EB4EA"/>
+                                <Setter TargetName="BgBd" Property="Background"
+                                        Value="{DynamicResource SelectedItemBrush}"/>
+                                <Setter TargetName="OutlineBd" Property="BorderBrush"
+                                        Value="{DynamicResource SelectedItemBorder}"/>
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource SelectedItemForeground}"/>
                                 <Setter TargetName="CloseBtn" Property="Visibility" Value="Visible"/>
                             </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ListView style with gray border -->
+        <Style TargetType="ListView">
+            <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"/>
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+            <Setter Property="BorderBrush" Value="Gray"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+
+        <!-- Style for SearchBox TextBox -->
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"/>
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+            <Setter Property="BorderBrush" Value="Gray"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+        </Style>
+
+        <!-- Style for Buttons -->
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.ButtonFaceKey}}"/>
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.ButtonTextKey}}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static vsshell:VsBrushes.ButtonShadowKey}}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarMouseOverBackgroundGradientKey}}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarSelectedBorderKey}}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarMouseDownBackgroundGradientKey}}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarMouseDownBorderKey}}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -201,7 +310,7 @@
                        Text="Type to filter by file name (multiple words supported)"
                        Padding="6,3"
                        VerticalAlignment="Center"
-                       Foreground="Gray"
+                       Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
                        IsHitTestVisible="False"
                        Visibility="{Binding Text.Length, ElementName=SearchBox, Converter={local:PlaceholderVisibilityConverter}}"/>
         </Grid>
@@ -210,7 +319,6 @@
                   Grid.Row="1"
                   Margin="0,0,0,10"
                   SelectionMode="Extended"
-                  BorderBrush="Gray"
                   BorderThickness="1"
                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                   ScrollViewer.CanContentScroll="False"
