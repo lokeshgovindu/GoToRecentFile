@@ -158,6 +158,11 @@ namespace GoToRecentFile.View
                 Resources["SelectedItemBrush"] = Resources["SelectedItemGradientDark"];
                 Resources["SelectedItemBorder"] = Resources["SelectedItemBorderDark"];
                 Resources["SelectedItemForeground"] = new SolidColorBrush(Colors.White);
+
+                Resources["ColumnHeaderHoverBg"] = new SolidColorBrush(Color.FromRgb(0x50, 0x50, 0x50));
+                Resources["ColumnHeaderHoverBorder"] = new SolidColorBrush(Color.FromRgb(0x70, 0x70, 0x70));
+                Resources["ColumnHeaderPressedBg"] = new SolidColorBrush(Color.FromRgb(0x40, 0x40, 0x40));
+                Resources["ColumnHeaderPressedBorder"] = new SolidColorBrush(Color.FromRgb(0x60, 0x60, 0x60));
             }
             else
             {

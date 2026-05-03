@@ -23,30 +23,36 @@
     <Window.Resources>
         <local:HighlightConverter x:Key="HighlightConverter" HighlightBrush="Yellow"/>
 
-        <!-- Gradient blue for selected items in light theme -->
+        <!-- Gradient light gray for selected items in light theme -->
         <LinearGradientBrush x:Key="SelectedItemGradientLight" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#FFECF4FF" Offset="0"/>
-            <GradientStop Color="#FFC4DDFC" Offset="0.5"/>
-            <GradientStop Color="#FFB0CFF7" Offset="1"/>
+            <GradientStop Color="#FFF0F0F0" Offset="0"/>
+            <GradientStop Color="#FFE0E0E0" Offset="0.5"/>
+            <GradientStop Color="#FFD0D0D0" Offset="1"/>
         </LinearGradientBrush>
-        <SolidColorBrush x:Key="SelectedItemBorderLight" Color="#FF7DA2CE"/>
+        <SolidColorBrush x:Key="SelectedItemBorderLight" Color="DarkGray"/>
 
         <!-- Gradient gray for selected items in dark theme -->
         <LinearGradientBrush x:Key="SelectedItemGradientDark" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#FF505862" Offset="0"/>
-            <GradientStop Color="#FF3E4750" Offset="0.5"/>
-            <GradientStop Color="#FF333B44" Offset="1"/>
+            <GradientStop Color="#FF585858" Offset="0"/>
+            <GradientStop Color="#FF484848" Offset="0.5"/>
+            <GradientStop Color="#FF3A3A3A" Offset="1"/>
         </LinearGradientBrush>
-        <SolidColorBrush x:Key="SelectedItemBorderDark" Color="#FF6A7A8A"/>
+        <SolidColorBrush x:Key="SelectedItemBorderDark" Color="DarkGray"/>
 
         <!-- Active brushes (swapped at runtime based on theme) -->
         <LinearGradientBrush x:Key="SelectedItemBrush" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#FFECF4FF" Offset="0"/>
-            <GradientStop Color="#FFC4DDFC" Offset="0.5"/>
-            <GradientStop Color="#FFB0CFF7" Offset="1"/>
+            <GradientStop Color="#FFF0F0F0" Offset="0"/>
+            <GradientStop Color="#FFE0E0E0" Offset="0.5"/>
+            <GradientStop Color="#FFD0D0D0" Offset="1"/>
         </LinearGradientBrush>
-        <SolidColorBrush x:Key="SelectedItemBorder" Color="#FF7DA2CE"/>
+        <SolidColorBrush x:Key="SelectedItemBorder" Color="DarkGray"/>
         <SolidColorBrush x:Key="SelectedItemForeground" Color="#FF000000"/>
+
+        <!-- Column header hover/pressed brushes (swapped at runtime based on theme) -->
+        <SolidColorBrush x:Key="ColumnHeaderHoverBg" Color="#FFE8E8E8"/>
+        <SolidColorBrush x:Key="ColumnHeaderHoverBorder" Color="DarkGray"/>
+        <SolidColorBrush x:Key="ColumnHeaderPressedBg" Color="#FFD0D0D0"/>
+        <SolidColorBrush x:Key="ColumnHeaderPressedBorder" Color="Gray"/>
 
         <!-- Sort arrow header templates -->
         <DataTemplate x:Key="HeaderTemplateArrowUp">
@@ -112,15 +118,15 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="HeaderBorder" Property="Background"
-                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarMouseOverBackgroundGradientKey}}"/>
+                                        Value="{DynamicResource ColumnHeaderHoverBg}"/>
                                 <Setter TargetName="HeaderBorder" Property="BorderBrush"
-                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarSelectedBorderKey}}"/>
+                                        Value="{DynamicResource ColumnHeaderHoverBorder}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="HeaderBorder" Property="Background"
-                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarMouseDownBackgroundGradientKey}}"/>
+                                        Value="{DynamicResource ColumnHeaderPressedBg}"/>
                                 <Setter TargetName="HeaderBorder" Property="BorderBrush"
-                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarMouseDownBorderKey}}"/>
+                                        Value="{DynamicResource ColumnHeaderPressedBorder}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -204,7 +210,7 @@
                             <!-- Hover: hollow outline only, no fill -->
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="OutlineBd" Property="BorderBrush"
-                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarSelectedBorderKey}}"/>
+                                        Value="DarkGray"/>
                                 <Setter TargetName="CloseBtn" Property="Visibility" Value="Visible"/>
                             </Trigger>
                             <!-- Selected: themed gradient fill -->
