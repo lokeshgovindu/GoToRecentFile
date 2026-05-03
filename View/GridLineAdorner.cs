@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using Microsoft.VisualStudio.Shell;
 
 namespace GoToRecentFile.View
 {
@@ -12,7 +13,6 @@ namespace GoToRecentFile.View
     internal sealed class GridLineAdorner : Adorner
     {
         private readonly ListView _listView;
-        private static readonly Pen LinePen = CreatePen();
 
         public GridLineAdorner(ListView listView) : base(listView)
         {
@@ -20,9 +20,26 @@ namespace GoToRecentFile.View
             IsHitTestVisible = false;
         }
 
-        private static Pen CreatePen()
+        private Pen CreatePen()
         {
-            var pen = new Pen(Brushes.LightGray, 1);
+            // Derive a subtle separator color: blend the window background and window text
+            // at 20% opacity so the line is always visible but never harsh in any VS theme.
+            var bgBrush  = _listView.TryFindResource(VsBrushes.WindowKey)     as SolidColorBrush;
+            var fgBrush  = _listView.TryFindResource(VsBrushes.WindowTextKey) as SolidColorBrush;
+
+            Color bg = bgBrush?.Color ?? Colors.White;
+            Color fg = fgBrush?.Color ?? Colors.Black;
+
+            // Mix: 80% background + 20% foreground
+            Color lineColor = Color.FromArgb(
+                255,
+                (byte)(bg.R * 0.80 + fg.R * 0.20),
+                (byte)(bg.G * 0.80 + fg.G * 0.20),
+                (byte)(bg.B * 0.80 + fg.B * 0.20));
+
+            var brush = new SolidColorBrush(lineColor);
+            brush.Freeze();
+            var pen = new Pen(brush, 1);
             pen.Freeze();
             return pen;
         }
@@ -41,6 +58,8 @@ namespace GoToRecentFile.View
                 .Transform(new Point(0, headerPresenter.ActualHeight)).Y;
             double totalHeight = _listView.ActualHeight;
 
+            Pen linePen = CreatePen();
+
             // Read the actual right edge of each column header for pixel-perfect alignment
             double x = headerPresenter.TransformToAncestor(_listView).Transform(new Point(0, 0)).X;
             foreach (var column in gridView.Columns)
@@ -48,7 +67,7 @@ namespace GoToRecentFile.View
                 x += column.ActualWidth;
                 double snappedX = SnapToPixel(x) - 1;
 
-                drawingContext.DrawLine(LinePen,
+                drawingContext.DrawLine(linePen,
                     new Point(snappedX, headerBottom),
                     new Point(snappedX, totalHeight - 1));
             }

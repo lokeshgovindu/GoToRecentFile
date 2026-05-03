@@ -123,6 +123,7 @@ namespace GoToRecentFile.View
                     Top = _lastTop.Value;
                 }
 
+                ApplyThemeAwareSelectionBrushes();
                 SearchBox.Focus();
                 AttachGridLineAdorner();
                 AttachMarqueeAdorner();
@@ -135,6 +136,40 @@ namespace GoToRecentFile.View
                 _lastLeft = Left;
                 _lastTop = Top;
             };
+        }
+
+        /// <summary>
+        /// Detects whether the current VS theme is dark and swaps the selected-item
+        /// gradient brushes accordingly.
+        /// </summary>
+        private void ApplyThemeAwareSelectionBrushes()
+        {
+            bool isDark = false;
+            if (Background is SolidColorBrush bgBrush)
+            {
+                var c = bgBrush.Color;
+                // Relative luminance: dark themes have a low value.
+                double luminance = 0.299 * c.R + 0.587 * c.G + 0.114 * c.B;
+                isDark = luminance < 128;
+            }
+
+            if (isDark)
+            {
+                Resources["SelectedItemBrush"] = Resources["SelectedItemGradientDark"];
+                Resources["SelectedItemBorder"] = Resources["SelectedItemBorderDark"];
+                Resources["SelectedItemForeground"] = new SolidColorBrush(Colors.White);
+
+                Resources["ColumnHeaderHoverBg"] = new SolidColorBrush(Color.FromRgb(0x50, 0x50, 0x50));
+                Resources["ColumnHeaderHoverBorder"] = new SolidColorBrush(Color.FromRgb(0x70, 0x70, 0x70));
+                Resources["ColumnHeaderPressedBg"] = new SolidColorBrush(Color.FromRgb(0x40, 0x40, 0x40));
+                Resources["ColumnHeaderPressedBorder"] = new SolidColorBrush(Color.FromRgb(0x60, 0x60, 0x60));
+            }
+            else
+            {
+                Resources["SelectedItemBrush"] = Resources["SelectedItemGradientLight"];
+                Resources["SelectedItemBorder"] = Resources["SelectedItemBorderLight"];
+                Resources["SelectedItemForeground"] = new SolidColorBrush(Colors.Black);
+            }
         }
 
         private void FileListView_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -219,7 +254,10 @@ namespace GoToRecentFile.View
 
         private void FileListView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            AcceptSelection();
+            // Only accept if the double-click originated on a list item, not a column header.
+            if (e.OriginalSource is DependencyObject source &&
+                GetVisualAncestor<ListViewItem>(source) != null)
+                AcceptSelection();
         }
 
         // Maps column header text to the sort property name.
@@ -519,10 +557,18 @@ namespace GoToRecentFile.View
 
         private void FileListView_MarqueeMouseDown(object sender, MouseButtonEventArgs e)
         {
-            // Only start marquee when clicking on the empty area (not on an item).
-            if (e.OriginalSource is DependencyObject source &&
-                GetVisualAncestor<ListViewItem>(source) != null)
-                return;
+            // Only start marquee when clicking on empty area — not on an item, header, or resize gripper.
+            if (e.OriginalSource is DependencyObject source)
+            {
+                if (GetVisualAncestor<ListViewItem>(source) != null)
+                    return;
+
+                if (GetVisualAncestor<GridViewColumnHeader>(source) != null)
+                    return;
+
+                if (GetVisualAncestor<System.Windows.Controls.Primitives.Thumb>(source) != null)
+                    return;
+            }
 
             _marqueeDragStart = e.GetPosition(FileListView);
             _marqueeActive = true;
