@@ -1,4 +1,5 @@
 using System;
+using System.Windows.Media;
 
 namespace GoToRecentFile.Models
 {
@@ -12,12 +13,18 @@ namespace GoToRecentFile.Models
         public string FullPath { get; }
         public DateTime Modified { get; }
 
-        public RecentFileEntry(string fullPath, string project, DateTime modified)
+        /// <summary>
+        /// The project color as assigned by VS tab colorization (or Transparent if unavailable).
+        /// </summary>
+        public SolidColorBrush ProjectColorBrush { get; }
+
+        public RecentFileEntry(string fullPath, string project, DateTime modified, SolidColorBrush projectColorBrush = null)
         {
             FullPath = fullPath;
             FileName = System.IO.Path.GetFileName(fullPath);
             Project = project;
             Modified = modified;
+            ProjectColorBrush = projectColorBrush ?? Brushes.Transparent;
         }
     }
 }

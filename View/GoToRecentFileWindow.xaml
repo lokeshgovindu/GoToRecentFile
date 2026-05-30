@@ -145,6 +145,15 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="ListViewItem">
                     <Grid SnapsToDevicePixels="True" UseLayoutRounding="True" Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="3"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <!-- Project color indicator bar -->
+                        <Border Grid.Column="0"
+                                Background="{Binding ProjectColorBrush}"/>
+                        <!-- Main content area -->
+                        <Grid Grid.Column="1">
                         <!-- Background layer for selection fill -->
                         <Border x:Name="BgBd" Background="Transparent"/>
                         <!-- Content layer with cell borders for vertical lines -->
@@ -204,6 +213,7 @@
                                     </ControlTemplate>
                                 </Button.Template>
                             </Button>
+                        </Grid>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <!-- Hover: hollow outline only, no fill -->
@@ -312,7 +322,7 @@
                      TextChanged="SearchBox_TextChanged"
                      PreviewKeyDown="SearchBox_PreviewKeyDown"/>
             <TextBlock x:Name="PlaceholderText"
-                       Text="Type to filter by file name (multiple words supported)"
+                       Text="Type to filter by file name (use P:text to filter by project)"
                        Padding="6,3"
                        VerticalAlignment="Center"
                        Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
@@ -373,7 +383,15 @@
                     <GridViewColumn Header="Project" Width="130">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding Project}" Margin="0,1"/>
+                                <ContentPresenter Margin="0,1">
+                                    <ContentPresenter.Content>
+                                        <MultiBinding Converter="{StaticResource HighlightConverter}">
+                                            <Binding Path="Project"/>
+                                            <Binding Path="ProjectSearchWords"
+                                                     RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                        </MultiBinding>
+                                    </ContentPresenter.Content>
+                                </ContentPresenter>
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>

@@ -40,12 +40,28 @@ namespace GoToRecentFile.View
                 new PropertyMetadata(Array.Empty<string>()));
 
         /// <summary>
-        /// Gets or sets the current search words used for highlighting.
+        /// Gets or sets the current search words used for highlighting file names.
         /// </summary>
         public string[] SearchWords
         {
             get { return (string[])GetValue(SearchWordsProperty); }
             set { SetValue(SearchWordsProperty, value); }
+        }
+
+        /// <summary>
+        /// Dependency property exposing the current project search words for the highlight converter binding.
+        /// </summary>
+        public static readonly DependencyProperty ProjectSearchWordsProperty =
+            DependencyProperty.Register(nameof(ProjectSearchWords), typeof(string[]), typeof(GoToRecentFileWindow),
+                new PropertyMetadata(Array.Empty<string>()));
+
+        /// <summary>
+        /// Gets or sets the current search words used for highlighting project names.
+        /// </summary>
+        public string[] ProjectSearchWords
+        {
+            get { return (string[])GetValue(ProjectSearchWordsProperty); }
+            set { SetValue(ProjectSearchWordsProperty, value); }
         }
 
         /// <summary>
@@ -196,16 +212,39 @@ namespace GoToRecentFile.View
             if (string.IsNullOrEmpty(filter))
             {
                 SearchWords = Array.Empty<string>();
+                ProjectSearchWords = Array.Empty<string>();
                 FileListView.ItemsSource = _allFiles;
                 UpdateStatus(_allFiles.Count, _allFiles.Count);
             }
             else
             {
                 string[] words = filter.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                SearchWords = words;
+
+                // Separate project filters (P:xxx) from file name filters
+                var projectWords = new List<string>();
+                var fileWords = new List<string>();
+
+                foreach (string w in words)
+                {
+                    if (w.StartsWith("P:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (w.Length > 2)
+                            projectWords.Add(w.Substring(2));
+                        // "P:" alone is ignored (no filter applied)
+                    }
+                    else
+                    {
+                        fileWords.Add(w);
+                    }
+                }
+
+                SearchWords = fileWords.ToArray();
+                ProjectSearchWords = projectWords.ToArray();
 
                 var filtered = _allFiles
-                    .Where(f => words.All(w => f.FileName.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0))
+                    .Where(f =>
+                        fileWords.All(w => f.FileName.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0) &&
+                        projectWords.All(w => f.Project.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0))
                     .ToList();
 
                 FileListView.ItemsSource = filtered;
