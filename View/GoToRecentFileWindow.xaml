@@ -7,7 +7,6 @@
         xmlns:vsshell="clr-namespace:Microsoft.VisualStudio.Shell;assembly=Microsoft.VisualStudio.Shell.15.0"
         mc:Ignorable="d"
         Title="Go To Recent File"
-        Icon="/GoToRecentFile;component/Resources/Icon.png"
         MinWidth="760"
         MinHeight="420"
         Width="980"

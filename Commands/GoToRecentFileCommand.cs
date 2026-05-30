@@ -11,46 +11,54 @@ namespace GoToRecentFile
     {
         protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
         {
-            var recentFiles = await RecentFileProvider.GetRecentFilesAsync();
-
-            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-
-            var dte = await VS.GetServiceAsync<DTE, DTE2>();
-
-            var dialog = new GoToRecentFileWindow(recentFiles);
-
-            // Set the VS main window as owner so it behaves as a proper modal dialog
-            var hwnd = (IntPtr)dte.MainWindow.HWnd;
-            var helper = new WindowInteropHelper(dialog) { Owner = hwnd };
-
-            dialog.FileRemoved += path =>
+            try
             {
-                ThreadHelper.ThrowIfNotOnUIThread();
-                try
-                {
-                    foreach (EnvDTE.Window window in dte.Windows)
-                    {
-                        if (window.Kind != "Document")
-                            continue;
+                var recentFiles = await RecentFileProvider.GetRecentFilesAsync();
 
-                        Document doc = window.Document;
-                        if (doc != null && string.Equals(doc.FullName, path, System.StringComparison.OrdinalIgnoreCase))
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+                var dte = await VS.GetServiceAsync<DTE, DTE2>();
+
+                var dialog = new GoToRecentFileWindow(recentFiles);
+
+                // Set the VS main window as owner so it behaves as a proper modal dialog
+                var hwnd = (IntPtr)dte.MainWindow.HWnd;
+                var helper = new WindowInteropHelper(dialog) { Owner = hwnd };
+
+                dialog.FileRemoved += path =>
+                {
+                    ThreadHelper.ThrowIfNotOnUIThread();
+                    try
+                    {
+                        foreach (EnvDTE.Window window in dte.Windows)
                         {
-                            window.Close(vsSaveChanges.vsSaveChangesPrompt);
-                            break;
+                            if (window.Kind != "Document")
+                                continue;
+
+                            Document doc = window.Document;
+                            if (doc != null && string.Equals(doc.FullName, path, System.StringComparison.OrdinalIgnoreCase))
+                            {
+                                window.Close(vsSaveChanges.vsSaveChangesPrompt);
+                                break;
+                            }
                         }
                     }
-                }
-                catch (System.Runtime.InteropServices.COMException)
+                    catch (System.Runtime.InteropServices.COMException)
+                    {
+                    }
+                };
+
+                bool? result = dialog.ShowDialog();
+
+                if (result == true && !string.IsNullOrEmpty(dialog.SelectedFilePath))
                 {
+                    await VS.Documents.OpenAsync(dialog.SelectedFilePath);
                 }
-            };
-
-            bool? result = dialog.ShowDialog();
-
-            if (result == true && !string.IsNullOrEmpty(dialog.SelectedFilePath))
+            }
+            catch (Exception ex)
             {
-                await VS.Documents.OpenAsync(dialog.SelectedFilePath);
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                await VS.MessageBox.ShowErrorAsync("GoToRecentFile Error", ex.ToString());
             }
         }
     }

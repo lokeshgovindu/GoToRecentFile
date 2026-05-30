@@ -29,6 +29,9 @@ namespace GoToRecentFile.View
         private static double? _lastLeft;
         private static double? _lastTop;
 
+        // Persisted search text across dialog invocations within the same VS session.
+        private static string _lastSearchText = string.Empty;
+
         /// <summary>
         /// Dependency property exposing the current search words for the highlight converter binding.
         /// </summary>
@@ -124,6 +127,14 @@ namespace GoToRecentFile.View
                 }
 
                 ApplyThemeAwareSelectionBrushes();
+
+                // Restore previous search text so the user sees filtered results immediately.
+                if (!string.IsNullOrEmpty(_lastSearchText))
+                {
+                    SearchBox.Text = _lastSearchText;
+                    SearchBox.SelectAll();
+                }
+
                 SearchBox.Focus();
                 AttachGridLineAdorner();
                 AttachMarqueeAdorner();
@@ -135,6 +146,7 @@ namespace GoToRecentFile.View
             {
                 _lastLeft = Left;
                 _lastTop = Top;
+                _lastSearchText = SearchBox.Text?.Trim() ?? string.Empty;
             };
         }
 
