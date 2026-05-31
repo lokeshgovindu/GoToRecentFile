@@ -13,6 +13,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Interop;
 using GoToRecentFile.Models;
+using GoToRecentFile.Services;
 
 namespace GoToRecentFile.View
 {
@@ -31,6 +32,17 @@ namespace GoToRecentFile.View
 
         // Persisted search text across dialog invocations within the same VS session.
         private static string _lastSearchText = string.Empty;
+
+        // Persisted window size across dialog invocations within the same VS session.
+        private static double? _lastWidth;
+        private static double? _lastHeight;
+
+        // Persisted column widths across dialog invocations within the same VS session.
+        private static double[] _lastColumnWidths;
+
+        // Persisted sort state across dialog invocations within the same VS session.
+        private static string _lastSortColumn;
+        private static ListSortDirection _lastSortDirection = ListSortDirection.Ascending;
 
         /// <summary>
         /// Dependency property exposing the current search words for the highlight converter binding.
@@ -65,9 +77,30 @@ namespace GoToRecentFile.View
         }
 
         /// <summary>
+        /// Dependency property exposing the current path search words for the highlight converter binding.
+        /// </summary>
+        public static readonly DependencyProperty PathSearchWordsProperty =
+            DependencyProperty.Register(nameof(PathSearchWords), typeof(string[]), typeof(GoToRecentFileWindow),
+                new PropertyMetadata(Array.Empty<string>()));
+
+        /// <summary>
+        /// Gets or sets the current search words used for highlighting paths.
+        /// </summary>
+        public string[] PathSearchWords
+        {
+            get { return (string[])GetValue(PathSearchWordsProperty); }
+            set { SetValue(PathSearchWordsProperty, value); }
+        }
+
+        /// <summary>
         /// Gets the file path the user selected, or null if cancelled.
         /// </summary>
         public string SelectedFilePath { get; private set; }
+
+        /// <summary>
+        /// Gets all file paths the user selected (for multi-select open).
+        /// </summary>
+        public IReadOnlyList<string> SelectedFilePaths { get; private set; } = Array.Empty<string>();
 
         /// <summary>
         /// Raised when the user removes a file from the list via the close button.
@@ -78,6 +111,9 @@ namespace GoToRecentFile.View
         private GridLineAdorner _gridLineAdorner;
         // Prevents SearchBox_TextChanged from auto-selecting item 0 while RemoveFiles restores selection.
         private bool _restoringSelection;
+
+        // Debounce timer for search filtering
+        private System.Windows.Threading.DispatcherTimer _searchDebounceTimer;
 
         // Marquee (rubber-band) selection
         private MarqueeAdorner _marqueeAdorner;
@@ -118,6 +154,11 @@ namespace GoToRecentFile.View
 
         internal GoToRecentFileWindow(IReadOnlyList<RecentFileEntry> files)
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            // Load layout settings from VS settings store (persisted across sessions).
+            LoadLayoutFromSettingsStore();
+
             _allFiles = files?.ToList() ?? new List<RecentFileEntry>();
 
             InitializeComponent();
@@ -142,6 +183,13 @@ namespace GoToRecentFile.View
                     Top = _lastTop.Value;
                 }
 
+                // Restore persisted window size if available.
+                if (_lastWidth.HasValue && _lastHeight.HasValue)
+                {
+                    Width = _lastWidth.Value;
+                    Height = _lastHeight.Value;
+                }
+
                 ApplyThemeAwareSelectionBrushes();
 
                 // Restore previous search text so the user sees filtered results immediately.
@@ -154,6 +202,29 @@ namespace GoToRecentFile.View
                 SearchBox.Focus();
                 AttachGridLineAdorner();
                 AttachMarqueeAdorner();
+
+                // Restore persisted column widths
+                var gridView = FileListView.View as GridView;
+                if (_lastColumnWidths != null && gridView != null
+                    && _lastColumnWidths.Length == gridView.Columns.Count)
+                {
+                    for (int i = 0; i < _lastColumnWidths.Length; i++)
+                    {
+                        gridView.Columns[i].Width = _lastColumnWidths[i];
+                    }
+                }
+
+                // Restore persisted sort order
+                if (!string.IsNullOrEmpty(_lastSortColumn) && _columnSortMap.ContainsKey(_lastSortColumn))
+                {
+                    string sortBy = _columnSortMap[_lastSortColumn];
+                    ICollectionView view = CollectionViewSource.GetDefaultView(FileListView.ItemsSource);
+                    if (view != null)
+                    {
+                        view.SortDescriptions.Clear();
+                        view.SortDescriptions.Add(new SortDescription(sortBy, _lastSortDirection));
+                    }
+                }
             };
 
             FileListView.SizeChanged += (s, e) => InvalidateGridLines();
@@ -162,7 +233,23 @@ namespace GoToRecentFile.View
             {
                 _lastLeft = Left;
                 _lastTop = Top;
+                _lastWidth = ActualWidth;
+                _lastHeight = ActualHeight;
                 _lastSearchText = SearchBox.Text?.Trim() ?? string.Empty;
+
+                // Persist column widths
+                var gridView = FileListView.View as GridView;
+                if (gridView != null)
+                {
+                    _lastColumnWidths = gridView.Columns.Select(c => c.ActualWidth).ToArray();
+                }
+
+                // Persist sort state
+                _lastSortColumn = _lastHeaderClicked?.Column?.Header as string;
+                _lastSortDirection = _lastDirection;
+
+                // Save layout to VS settings store (persisted across sessions).
+                SaveLayoutToSettingsStore();
             };
         }
 
@@ -200,12 +287,65 @@ namespace GoToRecentFile.View
             }
         }
 
+        /// <summary>
+        /// Loads layout settings from the VS settings store into the static fields
+        /// so they survive across VS sessions.
+        /// </summary>
+        private static void LoadLayoutFromSettingsStore()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (_lastWidth.HasValue)
+                return; // Already loaded in this session.
+
+            WindowLayoutSettings.Load();
+            _lastLeft = WindowLayoutSettings.WindowLeft;
+            _lastTop = WindowLayoutSettings.WindowTop;
+            _lastWidth = WindowLayoutSettings.WindowWidth;
+            _lastHeight = WindowLayoutSettings.WindowHeight;
+            _lastColumnWidths = WindowLayoutSettings.ColumnWidths;
+        }
+
+        /// <summary>
+        /// Saves the current layout settings to the VS settings store.
+        /// </summary>
+        private void SaveLayoutToSettingsStore()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            WindowLayoutSettings.WindowLeft = _lastLeft;
+            WindowLayoutSettings.WindowTop = _lastTop;
+            WindowLayoutSettings.WindowWidth = _lastWidth;
+            WindowLayoutSettings.WindowHeight = _lastHeight;
+            WindowLayoutSettings.ColumnWidths = _lastColumnWidths;
+            WindowLayoutSettings.Save();
+        }
+
         private void FileListView_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            OpenButton.IsEnabled = FileListView.SelectedItems.Count == 1;
+            OpenButton.IsEnabled = FileListView.SelectedItems.Count > 0;
         }
 
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_searchDebounceTimer == null)
+            {
+                _searchDebounceTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(100)
+                };
+                _searchDebounceTimer.Tick += (s, args) =>
+                {
+                    _searchDebounceTimer.Stop();
+                    ApplyFilter();
+                };
+            }
+
+            _searchDebounceTimer.Stop();
+            _searchDebounceTimer.Start();
+        }
+
+        private void ApplyFilter()
         {
             string filter = SearchBox.Text?.Trim();
 
@@ -213,6 +353,8 @@ namespace GoToRecentFile.View
             {
                 SearchWords = Array.Empty<string>();
                 ProjectSearchWords = Array.Empty<string>();
+                PathSearchWords = Array.Empty<string>();
+
                 FileListView.ItemsSource = _allFiles;
                 UpdateStatus(_allFiles.Count, _allFiles.Count);
             }
@@ -220,8 +362,9 @@ namespace GoToRecentFile.View
             {
                 string[] words = filter.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
-                // Separate project filters (P:xxx) from file name filters
+                // Separate prefixed filters from general search words
                 var projectWords = new List<string>();
+                var pathWords = new List<string>();
                 var fileWords = new List<string>();
 
                 foreach (string w in words)
@@ -230,7 +373,11 @@ namespace GoToRecentFile.View
                     {
                         if (w.Length > 2)
                             projectWords.Add(w.Substring(2));
-                        // "P:" alone is ignored (no filter applied)
+                    }
+                    else if (w.StartsWith("F:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (w.Length > 2)
+                            pathWords.Add(w.Substring(2));
                     }
                     else
                     {
@@ -240,11 +387,17 @@ namespace GoToRecentFile.View
 
                 SearchWords = fileWords.ToArray();
                 ProjectSearchWords = projectWords.ToArray();
+                PathSearchWords = pathWords.ToArray();
 
-                var filtered = _allFiles
+                List<RecentFileEntry> filtered;
+
+                // Always search each category specifically.
+                // No prefix words search only in FileName (default behavior).
+                filtered = _allFiles
                     .Where(f =>
                         fileWords.All(w => f.FileName.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0) &&
-                        projectWords.All(w => f.Project.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0))
+                        projectWords.All(w => f.Project.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0) &&
+                        pathWords.All(w => f.FullPath.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0))
                     .ToList();
 
                 FileListView.ItemsSource = filtered;
@@ -283,6 +436,35 @@ namespace GoToRecentFile.View
             {
                 AcceptSelection();
                 e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                if (!string.IsNullOrEmpty(SearchBox.Text))
+                {
+                    SearchBox.Clear();
+                    e.Handled = true;
+                }
+                // else: let Escape propagate to close the dialog
+            }
+            else if (e.Key == Key.P && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                InsertSearchPrefix("P:");
+                e.Handled = true;
+            }
+            else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                InsertSearchPrefix("F:");
+                e.Handled = true;
+            }
+        }
+
+        private void InsertSearchPrefix(string prefix)
+        {
+            string text = SearchBox.Text ?? "";
+            if (!text.Contains(prefix))
+            {
+                SearchBox.Text = prefix + text;
+                SearchBox.CaretIndex = prefix.Length;
             }
         }
 
@@ -549,9 +731,11 @@ namespace GoToRecentFile.View
 
         private void AcceptSelection()
         {
-            if (FileListView.SelectedItem is RecentFileEntry entry)
+            var selected = FileListView.SelectedItems.Cast<RecentFileEntry>().ToList();
+            if (selected.Count > 0)
             {
-                SelectedFilePath = entry.FullPath;
+                SelectedFilePath = selected[0].FullPath;
+                SelectedFilePaths = selected.Select(f => f.FullPath).ToList();
                 DialogResult = true;
                 Close();
             }
@@ -561,6 +745,8 @@ namespace GoToRecentFile.View
         {
             Title = $"Go To Recent File [{shown} of {total}]";
         }
+
+
 
         private void AttachGridLineAdorner()
         {

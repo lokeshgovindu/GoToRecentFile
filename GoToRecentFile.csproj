@@ -50,6 +50,7 @@
     <Compile Include="Commands\GoToRecentFileCommand.cs" />
     <Compile Include="GoToRecentFilePackage.cs" />
     <Compile Include="Services\RecentFileProvider.cs" />
+    <Compile Include="Services\WindowLayoutSettings.cs" />
     <Compile Include="source.extension.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>

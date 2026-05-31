@@ -18,6 +18,11 @@ namespace GoToRecentFile.Models
         /// </summary>
         public SolidColorBrush ProjectColorBrush { get; }
 
+        /// <summary>
+        /// Whether this file is pinned to the top of the list.
+        /// </summary>
+        public bool IsPinned { get; set; }
+
         public RecentFileEntry(string fullPath, string project, DateTime modified, SolidColorBrush projectColorBrush = null)
         {
             FullPath = fullPath;

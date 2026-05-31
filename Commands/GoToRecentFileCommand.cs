@@ -50,9 +50,12 @@ namespace GoToRecentFile
 
                 bool? result = dialog.ShowDialog();
 
-                if (result == true && !string.IsNullOrEmpty(dialog.SelectedFilePath))
+                if (result == true && dialog.SelectedFilePaths.Count > 0)
                 {
-                    await VS.Documents.OpenAsync(dialog.SelectedFilePath);
+                    foreach (string filePath in dialog.SelectedFilePaths)
+                    {
+                        await VS.Documents.OpenAsync(filePath);
+                    }
                 }
             }
             catch (Exception ex)
