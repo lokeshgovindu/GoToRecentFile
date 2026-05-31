@@ -1,0 +1,130 @@
+<UserControl x:Class="GoToRecentFile.Options.SettingsPageControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:GoToRecentFile.Options"
+             mc:Ignorable="d"
+             d:DesignHeight="400" d:DesignWidth="600"
+             Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
+    <UserControl.Resources>
+        <local:InverseBoolToVisibilityConverter x:Key="BoolToVisConverter"/>
+    </UserControl.Resources>
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Search/filter bar -->
+        <Grid Grid.Row="0" Margin="0,0,0,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="SearchBox"
+                     Padding="4,2"
+                     VerticalContentAlignment="Center"
+                     TextChanged="SearchBox_TextChanged"/>
+            <TextBlock x:Name="SearchPlaceholder"
+                       Text="Search settings..."
+                       Padding="6,3"
+                       VerticalAlignment="Center"
+                       Foreground="Gray"
+                       IsHitTestVisible="False"
+                       Visibility="{Binding Text.Length, ElementName=SearchBox, Converter={StaticResource BoolToVisConverter}}"/>
+        </Grid>
+
+        <!-- Settings DataGrid -->
+        <DataGrid x:Name="SettingsGrid"
+                  Grid.Row="1"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  SelectionChanged="SettingsGrid_SelectionChanged"
+                  MouseDoubleClick="SettingsGrid_MouseDoubleClick"
+                  IsReadOnly="True"
+                  CanUserReorderColumns="False"
+                  SelectionMode="Single"
+                  SelectionUnit="FullRow"
+                  HeadersVisibility="Column"
+                  GridLinesVisibility="Horizontal"
+                  HorizontalGridLinesBrush="LightGray"
+                  BorderThickness="1"
+                  BorderBrush="Gray"
+                  AlternatingRowBackground="#F8F8F8"
+                  RowHeight="24">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="200" IsReadOnly="True">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="VerticalAlignment" Value="Center"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="70" IsReadOnly="True">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="VerticalAlignment" Value="Center"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTemplateColumn Header="Value" Width="200">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Value}" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsModified}" Value="True">
+                                                <Setter Property="FontWeight" Value="Bold"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Default" Binding="{Binding Default}" Width="200" IsReadOnly="True">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="VerticalAlignment" Value="Center"/>
+                            <Setter Property="Foreground" Value="Gray"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Help/Description text for selected setting -->
+        <TextBox x:Name="HelpTextBox"
+                 Grid.Row="2"
+                 Margin="0,6,0,0"
+                 Height="50"
+                 IsReadOnly="True"
+                 TextWrapping="Wrap"
+                 VerticalScrollBarVisibility="Auto"
+                 Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
+                 BorderBrush="Gray"
+                 BorderThickness="1"
+                 Padding="4,3"
+                 FontStyle="Italic"/>
+
+        <!-- Buttons -->
+        <Grid Grid.Row="3" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <Button Content="Reset All" Width="80" Height="24" Margin="0,0,8,0" Click="ResetAll_Click"/>
+                <Button Content="Reset Selected" Width="100" Height="24" Click="ResetSelected_Click"/>
+            </StackPanel>
+            <Button x:Name="ApplyButton" Grid.Column="2" Content="Apply" Width="80" Height="24" IsEnabled="False" Click="Apply_Click"/>
+        </Grid>
+    </Grid>
+</UserControl>

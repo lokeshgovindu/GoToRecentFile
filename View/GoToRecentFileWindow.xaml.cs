@@ -13,6 +13,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Interop;
 using GoToRecentFile.Models;
+using GoToRecentFile.Options;
+using GoToRecentFile.Services;
 
 namespace GoToRecentFile.View
 {
@@ -29,6 +31,20 @@ namespace GoToRecentFile.View
         private static double? _lastLeft;
         private static double? _lastTop;
 
+        // Persisted search text across dialog invocations within the same VS session.
+        private static string _lastSearchText = string.Empty;
+
+        // Persisted window size across dialog invocations within the same VS session.
+        private static double? _lastWidth;
+        private static double? _lastHeight;
+
+        // Persisted column widths across dialog invocations within the same VS session.
+        private static double[] _lastColumnWidths;
+
+        // Persisted sort state across dialog invocations within the same VS session.
+        private static string _lastSortColumn;
+        private static ListSortDirection _lastSortDirection = ListSortDirection.Ascending;
+
         /// <summary>
         /// Dependency property exposing the current search words for the highlight converter binding.
         /// </summary>
@@ -37,7 +53,7 @@ namespace GoToRecentFile.View
                 new PropertyMetadata(Array.Empty<string>()));
 
         /// <summary>
-        /// Gets or sets the current search words used for highlighting.
+        /// Gets or sets the current search words used for highlighting file names.
         /// </summary>
         public string[] SearchWords
         {
@@ -46,9 +62,46 @@ namespace GoToRecentFile.View
         }
 
         /// <summary>
+        /// Dependency property exposing the current project search words for the highlight converter binding.
+        /// </summary>
+        public static readonly DependencyProperty ProjectSearchWordsProperty =
+            DependencyProperty.Register(nameof(ProjectSearchWords), typeof(string[]), typeof(GoToRecentFileWindow),
+                new PropertyMetadata(Array.Empty<string>()));
+
+        /// <summary>
+        /// Gets or sets the current search words used for highlighting project names.
+        /// </summary>
+        public string[] ProjectSearchWords
+        {
+            get { return (string[])GetValue(ProjectSearchWordsProperty); }
+            set { SetValue(ProjectSearchWordsProperty, value); }
+        }
+
+        /// <summary>
+        /// Dependency property exposing the current path search words for the highlight converter binding.
+        /// </summary>
+        public static readonly DependencyProperty PathSearchWordsProperty =
+            DependencyProperty.Register(nameof(PathSearchWords), typeof(string[]), typeof(GoToRecentFileWindow),
+                new PropertyMetadata(Array.Empty<string>()));
+
+        /// <summary>
+        /// Gets or sets the current search words used for highlighting paths.
+        /// </summary>
+        public string[] PathSearchWords
+        {
+            get { return (string[])GetValue(PathSearchWordsProperty); }
+            set { SetValue(PathSearchWordsProperty, value); }
+        }
+
+        /// <summary>
         /// Gets the file path the user selected, or null if cancelled.
         /// </summary>
         public string SelectedFilePath { get; private set; }
+
+        /// <summary>
+        /// Gets all file paths the user selected (for multi-select open).
+        /// </summary>
+        public IReadOnlyList<string> SelectedFilePaths { get; private set; } = Array.Empty<string>();
 
         /// <summary>
         /// Raised when the user removes a file from the list via the close button.
@@ -59,6 +112,9 @@ namespace GoToRecentFile.View
         private GridLineAdorner _gridLineAdorner;
         // Prevents SearchBox_TextChanged from auto-selecting item 0 while RemoveFiles restores selection.
         private bool _restoringSelection;
+
+        // Debounce timer for search filtering
+        private System.Windows.Threading.DispatcherTimer _searchDebounceTimer;
 
         // Marquee (rubber-band) selection
         private MarqueeAdorner _marqueeAdorner;
@@ -99,34 +155,97 @@ namespace GoToRecentFile.View
 
         internal GoToRecentFileWindow(IReadOnlyList<RecentFileEntry> files)
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            // Load layout settings from VS settings store (persisted across sessions).
+            LoadLayoutFromSettingsStore();
+
             _allFiles = files?.ToList() ?? new List<RecentFileEntry>();
 
             InitializeComponent();
 
             SourceInitialized += OnSourceInitialized;
 
-            FileListView.ItemsSource = _allFiles;
-            UpdateStatus(_allFiles.Count, _allFiles.Count);
+            // Pre-filter if there is a remembered search string to avoid flickering.
+            bool hasRememberedSearch = GoToRecentFileSettings.GetBool(GoToRecentFileSettings.RememberSearchText)
+                && !string.IsNullOrEmpty(_lastSearchText);
 
-            if (_allFiles.Count > 0)
+            if (hasRememberedSearch)
+            {
+                SearchBox.Text = _lastSearchText;
+                // ApplyFilter will be triggered by TextChanged, setting ItemsSource to filtered list.
+            }
+            else
+            {
+                FileListView.ItemsSource = _allFiles;
+                UpdateStatus(_allFiles.Count, _allFiles.Count);
+            }
+
+            if (FileListView.Items.Count > 0)
             {
                 FileListView.SelectedIndex = 0;
             }
 
             Loaded += (s, e) =>
             {
-                // Restore persisted position if available, otherwise CenterOwner is used.
-                if (_lastLeft.HasValue && _lastTop.HasValue)
+                // Restore persisted position if available and on the same monitor as the IDE.
+                if (GoToRecentFileSettings.GetBool(GoToRecentFileSettings.RememberWindowPosition)
+                    && _lastLeft.HasValue && _lastTop.HasValue
+                    && IsPositionOnOwnerMonitor(_lastLeft.Value, _lastTop.Value))
                 {
                     WindowStartupLocation = WindowStartupLocation.Manual;
                     Left = _lastLeft.Value;
                     Top = _lastTop.Value;
                 }
+                else
+                {
+                    CenterOnOwnerMonitor();
+                }
+
+                // Restore persisted window size if available.
+                if (GoToRecentFileSettings.GetBool(GoToRecentFileSettings.RememberWindowSize)
+                    && _lastWidth.HasValue && _lastHeight.HasValue)
+                {
+                    Width = _lastWidth.Value;
+                    Height = _lastHeight.Value;
+                }
 
                 ApplyThemeAwareSelectionBrushes();
+                ApplyUserSettings();
+
+                // Select all text in search box for easy replacement.
+                if (hasRememberedSearch)
+                {
+                    SearchBox.SelectAll();
+                }
+
                 SearchBox.Focus();
                 AttachGridLineAdorner();
                 AttachMarqueeAdorner();
+
+                // Restore persisted column widths
+                var gridView = FileListView.View as GridView;
+                if (GoToRecentFileSettings.GetBool(GoToRecentFileSettings.RememberColumnWidths)
+                    && _lastColumnWidths != null && gridView != null
+                    && _lastColumnWidths.Length == gridView.Columns.Count)
+                {
+                    for (int i = 0; i < _lastColumnWidths.Length; i++)
+                    {
+                        gridView.Columns[i].Width = _lastColumnWidths[i];
+                    }
+                }
+
+                // Restore persisted sort order
+                if (!string.IsNullOrEmpty(_lastSortColumn) && _columnSortMap.ContainsKey(_lastSortColumn))
+                {
+                    string sortBy = _columnSortMap[_lastSortColumn];
+                    ICollectionView view = CollectionViewSource.GetDefaultView(FileListView.ItemsSource);
+                    if (view != null)
+                    {
+                        view.SortDescriptions.Clear();
+                        view.SortDescriptions.Add(new SortDescription(sortBy, _lastSortDirection));
+                    }
+                }
             };
 
             FileListView.SizeChanged += (s, e) => InvalidateGridLines();
@@ -135,6 +254,23 @@ namespace GoToRecentFile.View
             {
                 _lastLeft = Left;
                 _lastTop = Top;
+                _lastWidth = ActualWidth;
+                _lastHeight = ActualHeight;
+                _lastSearchText = SearchBox.Text?.Trim() ?? string.Empty;
+
+                // Persist column widths
+                var gridView = FileListView.View as GridView;
+                if (gridView != null)
+                {
+                    _lastColumnWidths = gridView.Columns.Select(c => c.ActualWidth).ToArray();
+                }
+
+                // Persist sort state
+                _lastSortColumn = _lastHeaderClicked?.Column?.Header as string;
+                _lastSortDirection = _lastDirection;
+
+                // Save layout to VS settings store (persisted across sessions).
+                SaveLayoutToSettingsStore();
             };
         }
 
@@ -172,28 +308,343 @@ namespace GoToRecentFile.View
             }
         }
 
+        /// <summary>
+        /// Reads user-configurable settings from the options store and applies them to this window.
+        /// </summary>
+        private void ApplyUserSettings()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            // Window font size
+            int fontSize = GoToRecentFileSettings.GetInt(GoToRecentFileSettings.WindowFontSize);
+            if (fontSize > 0)
+                FontSize = fontSize;
+
+            // Search placeholder text
+            string placeholder = GoToRecentFileSettings.GetValue(GoToRecentFileSettings.SearchPlaceholderText);
+            if (!string.IsNullOrEmpty(placeholder))
+                PlaceholderText.Text = placeholder;
+
+            // Highlight color
+            string highlightColor = GoToRecentFileSettings.GetValue(GoToRecentFileSettings.HighlightColor);
+            if (!string.IsNullOrEmpty(highlightColor))
+            {
+                try
+                {
+                    var converter = new BrushConverter();
+                    if (converter.ConvertFromString(highlightColor) is Brush brush)
+                    {
+                        var highlightConverter = (HighlightConverter)Resources["HighlightConverter"];
+                        if (highlightConverter != null)
+                            highlightConverter.HighlightBrush = brush;
+                    }
+                }
+                catch { }
+            }
+
+            // Alternating row background
+            bool enableAlternating = GoToRecentFileSettings.GetBool(GoToRecentFileSettings.EnableAlternatingRowBackground);
+            if (!enableAlternating)
+            {
+                FileListView.AlternationCount = 0;
+            }
+            else
+            {
+                FileListView.AlternationCount = 2;
+                // Apply custom alternate row color based on theme
+                bool isDark = IsDarkTheme();
+                string altColorHex = isDark
+                    ? GoToRecentFileSettings.GetValue(GoToRecentFileSettings.DarkAlternateRowBackground)
+                    : GoToRecentFileSettings.GetValue(GoToRecentFileSettings.LightAlternateRowBackground);
+                if (!string.IsNullOrEmpty(altColorHex))
+                {
+                    try
+                    {
+                        var color = (Color)ColorConverter.ConvertFromString(altColorHex);
+                        Resources["AlternateRowBrush"] = new SolidColorBrush(color);
+                    }
+                    catch { }
+                }
+            }
+
+            // Selected row colors from settings (override theme defaults)
+            bool isDarkTheme = IsDarkTheme();
+            ApplySelectedRowColors(isDarkTheme);
+
+            // Column header hover/pressed colors
+            ApplyColumnHeaderColors(isDarkTheme);
+        }
+
+        private void ApplySelectedRowColors(bool isDark)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            string bgValue = isDark
+                ? GoToRecentFileSettings.GetValue(GoToRecentFileSettings.DarkSelectedRowBackground)
+                : GoToRecentFileSettings.GetValue(GoToRecentFileSettings.LightSelectedRowBackground);
+
+            string borderValue = isDark
+                ? GoToRecentFileSettings.GetValue(GoToRecentFileSettings.DarkSelectedRowBorder)
+                : GoToRecentFileSettings.GetValue(GoToRecentFileSettings.LightSelectedRowBorder);
+
+            string fgValue = isDark
+                ? GoToRecentFileSettings.GetValue(GoToRecentFileSettings.DarkSelectedRowForeground)
+                : GoToRecentFileSettings.GetValue(GoToRecentFileSettings.LightSelectedRowForeground);
+
+            // Gradient background (comma-separated hex colors)
+            if (!string.IsNullOrEmpty(bgValue))
+            {
+                try
+                {
+                    string[] parts = bgValue.Split(',');
+                    if (parts.Length == 3)
+                    {
+                        var gradient = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+                        gradient.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString(parts[0].Trim()), 0));
+                        gradient.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString(parts[1].Trim()), 0.5));
+                        gradient.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString(parts[2].Trim()), 1));
+                        Resources["SelectedItemBrush"] = gradient;
+                    }
+                }
+                catch { }
+            }
+
+            if (!string.IsNullOrEmpty(borderValue))
+            {
+                try
+                {
+                    var color = (Color)ColorConverter.ConvertFromString(borderValue);
+                    Resources["SelectedItemBorder"] = new SolidColorBrush(color);
+                }
+                catch { }
+            }
+
+            if (!string.IsNullOrEmpty(fgValue))
+            {
+                try
+                {
+                    var color = (Color)ColorConverter.ConvertFromString(fgValue);
+                    Resources["SelectedItemForeground"] = new SolidColorBrush(color);
+                }
+                catch { }
+            }
+        }
+
+        private void ApplyColumnHeaderColors(bool isDark)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            string hoverBg = isDark
+                ? GoToRecentFileSettings.GetValue(GoToRecentFileSettings.DarkColumnHeaderHoverBackground)
+                : GoToRecentFileSettings.GetValue(GoToRecentFileSettings.LightColumnHeaderHoverBackground);
+
+            string pressedBg = isDark
+                ? GoToRecentFileSettings.GetValue(GoToRecentFileSettings.DarkColumnHeaderPressedBackground)
+                : GoToRecentFileSettings.GetValue(GoToRecentFileSettings.LightColumnHeaderPressedBackground);
+
+            if (!string.IsNullOrEmpty(hoverBg))
+            {
+                try
+                {
+                    var color = (Color)ColorConverter.ConvertFromString(hoverBg);
+                    Resources["ColumnHeaderHoverBg"] = new SolidColorBrush(color);
+                }
+                catch { }
+            }
+
+            if (!string.IsNullOrEmpty(pressedBg))
+            {
+                try
+                {
+                    var color = (Color)ColorConverter.ConvertFromString(pressedBg);
+                    Resources["ColumnHeaderPressedBg"] = new SolidColorBrush(color);
+                }
+                catch { }
+            }
+        }
+
+        private bool IsDarkTheme()
+        {
+            if (Background is SolidColorBrush bgBrush)
+            {
+                var c = bgBrush.Color;
+                double luminance = 0.299 * c.R + 0.587 * c.G + 0.114 * c.B;
+                return luminance < 128;
+            }
+            return false;
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct POINT { public int x, y; }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct RECT { public int left, top, right, bottom; }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct MONITORINFO
+        {
+            public int cbSize;
+            public RECT rcMonitor;
+            public RECT rcWork;
+            public uint dwFlags;
+        }
+
+        private const uint MONITOR_DEFAULTTONEAREST = 2;
+
+        /// <summary>
+        /// Checks whether the given position is on the same monitor as the owner (IDE) window.
+        /// </summary>
+        private bool IsPositionOnOwnerMonitor(double left, double top)
+        {
+            var ownerHandle = new WindowInteropHelper(this).Owner;
+            if (ownerHandle == IntPtr.Zero)
+                return true;
+
+            var ownerMonitor = MonitorFromWindow(ownerHandle, MONITOR_DEFAULTTONEAREST);
+            var pt = new POINT { x = (int)left, y = (int)top };
+            var pointMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            return ownerMonitor == pointMonitor;
+        }
+
+        /// <summary>
+        /// Centers the window on the same monitor as the owner (IDE) window.
+        /// </summary>
+        private void CenterOnOwnerMonitor()
+        {
+            var ownerHandle = new WindowInteropHelper(this).Owner;
+            if (ownerHandle == IntPtr.Zero)
+                return;
+
+            var monitor = MonitorFromWindow(ownerHandle, MONITOR_DEFAULTTONEAREST);
+            var info = new MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(MONITORINFO)) };
+            if (GetMonitorInfo(monitor, ref info))
+            {
+                var workArea = info.rcWork;
+                Left = workArea.left + (workArea.right - workArea.left - ActualWidth) / 2;
+                Top = workArea.top + (workArea.bottom - workArea.top - ActualHeight) / 2;
+            }
+        }
+
+        /// <summary>
+        /// Loads layout settings from the VS settings store into the static fields
+        /// so they survive across VS sessions.
+        /// </summary>
+        private static void LoadLayoutFromSettingsStore()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (_lastWidth.HasValue)
+                return; // Already loaded in this session.
+
+            WindowLayoutSettings.Load();
+            _lastLeft = WindowLayoutSettings.WindowLeft;
+            _lastTop = WindowLayoutSettings.WindowTop;
+            _lastWidth = WindowLayoutSettings.WindowWidth;
+            _lastHeight = WindowLayoutSettings.WindowHeight;
+            _lastColumnWidths = WindowLayoutSettings.ColumnWidths;
+        }
+
+        /// <summary>
+        /// Saves the current layout settings to the VS settings store.
+        /// </summary>
+        private void SaveLayoutToSettingsStore()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            WindowLayoutSettings.WindowLeft = _lastLeft;
+            WindowLayoutSettings.WindowTop = _lastTop;
+            WindowLayoutSettings.WindowWidth = _lastWidth;
+            WindowLayoutSettings.WindowHeight = _lastHeight;
+            WindowLayoutSettings.ColumnWidths = _lastColumnWidths;
+            WindowLayoutSettings.Save();
+        }
+
         private void FileListView_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            OpenButton.IsEnabled = FileListView.SelectedItems.Count == 1;
+            OpenButton.IsEnabled = FileListView.SelectedItems.Count > 0;
         }
 
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_searchDebounceTimer == null)
+            {
+                _searchDebounceTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(100)
+                };
+                _searchDebounceTimer.Tick += (s, args) =>
+                {
+                    _searchDebounceTimer.Stop();
+                    ApplyFilter();
+                };
+            }
+
+            _searchDebounceTimer.Stop();
+            _searchDebounceTimer.Start();
+        }
+
+        private void ApplyFilter()
         {
             string filter = SearchBox.Text?.Trim();
 
             if (string.IsNullOrEmpty(filter))
             {
                 SearchWords = Array.Empty<string>();
+                ProjectSearchWords = Array.Empty<string>();
+                PathSearchWords = Array.Empty<string>();
+
                 FileListView.ItemsSource = _allFiles;
                 UpdateStatus(_allFiles.Count, _allFiles.Count);
             }
             else
             {
                 string[] words = filter.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                SearchWords = words;
 
-                var filtered = _allFiles
-                    .Where(f => words.All(w => f.FileName.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0))
+                // Separate prefixed filters from general search words
+                var projectWords = new List<string>();
+                var pathWords = new List<string>();
+                var fileWords = new List<string>();
+
+                foreach (string w in words)
+                {
+                    if (w.StartsWith("P:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (w.Length > 2)
+                            projectWords.Add(w.Substring(2));
+                    }
+                    else if (w.StartsWith("F:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (w.Length > 2)
+                            pathWords.Add(w.Substring(2));
+                    }
+                    else
+                    {
+                        fileWords.Add(w);
+                    }
+                }
+
+                SearchWords = fileWords.ToArray();
+                ProjectSearchWords = projectWords.ToArray();
+                PathSearchWords = pathWords.ToArray();
+
+                List<RecentFileEntry> filtered;
+
+                // Always search each category specifically.
+                // No prefix words search only in FileName (default behavior).
+                filtered = _allFiles
+                    .Where(f =>
+                        fileWords.All(w => f.FileName.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0) &&
+                        projectWords.All(w => f.Project.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0) &&
+                        pathWords.All(w => f.FullPath.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0))
                     .ToList();
 
                 FileListView.ItemsSource = filtered;
@@ -232,6 +683,32 @@ namespace GoToRecentFile.View
             {
                 AcceptSelection();
                 e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                DialogResult = false;
+                Close();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.P && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                InsertSearchPrefix("P:");
+                e.Handled = true;
+            }
+            else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                InsertSearchPrefix("F:");
+                e.Handled = true;
+            }
+        }
+
+        private void InsertSearchPrefix(string prefix)
+        {
+            string text = SearchBox.Text ?? "";
+            if (!text.Contains(prefix))
+            {
+                SearchBox.Text = prefix + text;
+                SearchBox.CaretIndex = prefix.Length;
             }
         }
 
@@ -498,9 +975,11 @@ namespace GoToRecentFile.View
 
         private void AcceptSelection()
         {
-            if (FileListView.SelectedItem is RecentFileEntry entry)
+            var selected = FileListView.SelectedItems.Cast<RecentFileEntry>().ToList();
+            if (selected.Count > 0)
             {
-                SelectedFilePath = entry.FullPath;
+                SelectedFilePath = selected[0].FullPath;
+                SelectedFilePaths = selected.Select(f => f.FullPath).ToList();
                 DialogResult = true;
                 Close();
             }
@@ -510,6 +989,8 @@ namespace GoToRecentFile.View
         {
             Title = $"Go To Recent File [{shown} of {total}]";
         }
+
+
 
         private void AttachGridLineAdorner()
         {

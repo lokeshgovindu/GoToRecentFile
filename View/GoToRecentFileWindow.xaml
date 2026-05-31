@@ -7,7 +7,6 @@
         xmlns:vsshell="clr-namespace:Microsoft.VisualStudio.Shell;assembly=Microsoft.VisualStudio.Shell.15.0"
         mc:Ignorable="d"
         Title="Go To Recent File"
-        Icon="/GoToRecentFile;component/Resources/Icon.png"
         MinWidth="760"
         MinHeight="420"
         Width="980"
@@ -47,6 +46,9 @@
         </LinearGradientBrush>
         <SolidColorBrush x:Key="SelectedItemBorder" Color="DarkGray"/>
         <SolidColorBrush x:Key="SelectedItemForeground" Color="#FF000000"/>
+
+        <!-- Alternating row background brushes -->
+        <SolidColorBrush x:Key="AlternateRowBrush" Color="#08000000"/>
 
         <!-- Column header hover/pressed brushes (swapped at runtime based on theme) -->
         <SolidColorBrush x:Key="ColumnHeaderHoverBg" Color="#FFE8E8E8"/>
@@ -146,6 +148,15 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="ListViewItem">
                     <Grid SnapsToDevicePixels="True" UseLayoutRounding="True" Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="3"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <!-- Project color indicator bar -->
+                        <Border Grid.Column="0"
+                                Background="{Binding ProjectColorBrush}"/>
+                        <!-- Main content area -->
+                        <Grid Grid.Column="1">
                         <!-- Background layer for selection fill -->
                         <Border x:Name="BgBd" Background="Transparent"/>
                         <!-- Content layer with cell borders for vertical lines -->
@@ -206,7 +217,13 @@
                                 </Button.Template>
                             </Button>
                         </Grid>
+                        </Grid>
                         <ControlTemplate.Triggers>
+                            <!-- Alternating row background -->
+                            <Trigger Property="ItemsControl.AlternationIndex" Value="1">
+                                <Setter TargetName="BgBd" Property="Background"
+                                        Value="{DynamicResource AlternateRowBrush}"/>
+                            </Trigger>
                             <!-- Hover: hollow outline only, no fill -->
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="OutlineBd" Property="BorderBrush"
@@ -313,7 +330,7 @@
                      TextChanged="SearchBox_TextChanged"
                      PreviewKeyDown="SearchBox_PreviewKeyDown"/>
             <TextBlock x:Name="PlaceholderText"
-                       Text="Type to filter by file name (multiple words supported)"
+                       Text="Type to filter by file name (use P:string to filter by project, F:string to filter by path)"
                        Padding="6,3"
                        VerticalAlignment="Center"
                        Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
@@ -327,7 +344,8 @@
                   SelectionMode="Extended"
                   BorderThickness="1"
                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                  ScrollViewer.CanContentScroll="False"
+                  ScrollViewer.CanContentScroll="True"
+                  AlternationCount="2"
                   HorizontalContentAlignment="Stretch"
                   UseLayoutRounding="True"
                   MouseDoubleClick="FileListView_MouseDoubleClick"
@@ -374,14 +392,30 @@
                     <GridViewColumn Header="Project" Width="130">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding Project}" Margin="0,1"/>
+                                <ContentPresenter Margin="0,1">
+                                    <ContentPresenter.Content>
+                                        <MultiBinding Converter="{StaticResource HighlightConverter}">
+                                            <Binding Path="Project"/>
+                                            <Binding Path="ProjectSearchWords"
+                                                     RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                        </MultiBinding>
+                                    </ContentPresenter.Content>
+                                </ContentPresenter>
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
                     <GridViewColumn Header="Path" Width="440">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding FullPath}" TextTrimming="CharacterEllipsis" Margin="0,1"/>
+                                <ContentPresenter Margin="0,1" ToolTip="{Binding FullPath}">
+                                    <ContentPresenter.Content>
+                                        <MultiBinding Converter="{StaticResource HighlightConverter}">
+                                            <Binding Path="FullPath"/>
+                                            <Binding Path="PathSearchWords"
+                                                     RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                        </MultiBinding>
+                                    </ContentPresenter.Content>
+                                </ContentPresenter>
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
