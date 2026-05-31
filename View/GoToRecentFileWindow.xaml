@@ -330,7 +330,7 @@
                      TextChanged="SearchBox_TextChanged"
                      PreviewKeyDown="SearchBox_PreviewKeyDown"/>
             <TextBlock x:Name="PlaceholderText"
-                       Text="Type to filter by file name (use P: to filter by project, F: to filter by path)"
+                       Text="Type to filter by file name (use P:string to filter by project, F:string to filter by path)"
                        Padding="6,3"
                        VerticalAlignment="Center"
                        Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
