@@ -1049,6 +1049,15 @@ namespace GoToRecentFile.View
 
                 if (GetVisualAncestor<System.Windows.Controls.Primitives.Thumb>(source) != null)
                     return;
+
+                // Ignore clicks on scrollbar parts (track, repeat buttons, etc.) so
+                // clicking the empty area of the scrollbar still scrolls instead of
+                // starting a marquee selection.
+                if (GetVisualAncestor<System.Windows.Controls.Primitives.RepeatButton>(source) != null)
+                    return;
+
+                if (GetVisualAncestor<System.Windows.Controls.Primitives.ScrollBar>(source) != null)
+                    return;
             }
 
             _marqueeDragStart = e.GetPosition(FileListView);
